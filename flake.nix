@@ -116,7 +116,7 @@
           nirinit = pkgs.rustPlatform.buildRustPackage {
             pname = packageName;
             src = ./.;
-            version = "0.1.3";
+            version = "0.1.4";
 
             cargoLock.lockFile = ./Cargo.lock;
 
