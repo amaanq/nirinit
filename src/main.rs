@@ -144,13 +144,17 @@ struct Args {
    #[arg(long, default_value = "300")]
    save_interval: u64,
 
+   /// Path to config file
+   #[arg(long, short)]
+   config: Option<PathBuf>,
+
    /// Enable debug output
    #[arg(long, short)]
    debug: bool,
 }
 
-fn load_config() -> eyre::Result<Config> {
-   let config_path = config_file()?;
+fn load_config(config_override: Option<&Path>) -> eyre::Result<Config> {
+   let config_path = config_file(config_override)?;
 
    let config = fs::read_to_string(&config_path)
       .wrap_err_with(|| format!("The config file doesn't exist at {}", config_path.display()))?;
@@ -199,7 +203,18 @@ fn data_file() -> eyre::Result<PathBuf> {
    Ok(data_dir.join("session.json"))
 }
 
-fn config_file() -> eyre::Result<PathBuf> {
+/// Resolves the config file path by checking the `--config` flag, then the
+/// `NIRINIT_CONFIG` environment variable, and finally falling back to
+/// `$XDG_CONFIG_HOME/nirinit/config.toml`.
+fn config_file(config_override: Option<&Path>) -> eyre::Result<PathBuf> {
+   if let Some(path) = config_override {
+      return Ok(path.to_path_buf());
+   }
+
+   if let Ok(config_path) = std::env::var("NIRINIT_CONFIG") {
+      return Ok(PathBuf::from(config_path));
+   }
+
    let config_dir = dirs::config_dir()
       .ok_or_eyre("Failed to locate the config directory ($XDG_CONFIG_HOME)")?
       .join(APP_NAME);
@@ -446,7 +461,7 @@ fn main() -> eyre::Result<()> {
       logger::enable_debug();
    }
 
-   let config = load_config().unwrap_or_else(|err| {
+   let config = load_config(args.config.as_deref()).unwrap_or_else(|err| {
       warn!("failed to load config, using default values (reason: {err})");
       Config::default()
    });

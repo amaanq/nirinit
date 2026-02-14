@@ -68,43 +68,29 @@
                 };
               };
             };
-            config = mkIf cfg.enable {
-              systemd.user.services.nirinit = {
-                enable = true;
-                description = "Nirinit";
-                wantedBy = [ "graphical-session.target" ];
-                partOf = [ "graphical-session.target" ];
-                wants = [ "graphical-session.target" ];
-                after = [ "graphical-session.target" ];
-                serviceConfig = {
-                  Type = "simple";
-                  Restart = "always";
-                  ExecStart = "${getExe cfg.package}";
-                  PrivateTmp = true;
+            config =
+              let
+                configFile = (pkgs.formats.toml { }).generate "nirinit-config.toml" cfg.settings;
+              in
+              mkIf cfg.enable {
+                systemd.user.services.nirinit = {
+                  enable = true;
+                  description = "Nirinit";
+                  wantedBy = [ "graphical-session.target" ];
+                  partOf = [ "graphical-session.target" ];
+                  wants = [ "graphical-session.target" ];
+                  after = [ "graphical-session.target" ];
+                  serviceConfig = {
+                    Type = "simple";
+                    Restart = "always";
+                    ExecStart = "${getExe cfg.package} --config ${configFile}";
+                    PrivateTmp = true;
+                  };
                 };
               };
-            };
           };
 
         default = self.nixosModules.nirinit;
-      };
-
-      homeModules = {
-        nirinit =
-          { osConfig, pkgs, ... }:
-          let
-            inherit (lib) mkIf;
-            cfg = osConfig.services.nirinit;
-          in
-          {
-            config = mkIf cfg.enable {
-              xdg.configFile."nirinit/config.toml" = {
-                source = (pkgs.formats.toml { }).generate "nirinit-config.toml" cfg.settings;
-              };
-            };
-          };
-
-        default = self.homeModules.nirinit;
       };
 
       packages = eachSystem (
