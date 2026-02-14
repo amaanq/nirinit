@@ -116,7 +116,7 @@
           nirinit = pkgs.rustPlatform.buildRustPackage {
             pname = packageName;
             src = ./.;
-            version = "0.1.4";
+            version = "0.2.0";
 
             cargoLock.lockFile = ./Cargo.lock;
 
@@ -134,7 +134,7 @@
         {
           default = pkgs.mkShell {
             packages = [
-              pkgs.nixfmt-rfc-style
+              pkgs.nixfmt
               (fenixPkgs.complete.withComponents [
                 "cargo"
                 "clippy"
