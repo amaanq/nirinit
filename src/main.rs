@@ -236,8 +236,17 @@ fn find_workspace_for_window<'niri>(
       .find(|w| window.workspace_id == Some(w.id))
 }
 
-/// Save the session
-fn save_session(file_path: &Path, config: &Config) -> eyre::Result<()> {
+struct SaveOptions<'a> {
+   file_path:  &'a Path,
+   config:     &'a Config,
+   /// When true, an empty window list is treated as stale data (e.g. the
+   /// compositor already tore down surfaces) and the existing session file
+   /// is left untouched.
+   skip_empty: bool,
+}
+
+/// Save the session.
+fn save_session(opts: &SaveOptions) -> eyre::Result<()> {
    let windows = niri_windows()?;
    let workspaces = niri_workspaces()?;
 
@@ -248,7 +257,7 @@ fn save_session(file_path: &Path, config: &Config) -> eyre::Result<()> {
 
          // Map app_id to launch command if it exists in the config
          let launch_command = window.app_id.as_ref().and_then(|app_id| {
-            config
+            opts.config
                .launch
                .get(app_id)
                .cloned()
@@ -268,12 +277,21 @@ fn save_session(file_path: &Path, config: &Config) -> eyre::Result<()> {
       })
       .collect::<Vec<_>>();
 
+   if opts.skip_empty && session_windows.is_empty() {
+      debug!("no windows found during shutdown, preserving existing session file");
+      return Ok(());
+   }
+
    let json_data = serde_json::to_string_pretty(&session_windows)
       .wrap_err("Failed to serialize session data")?;
 
-   fs::write(file_path, json_data)
-      .wrap_err_with(|| format!("Failed to write to session file: {}", file_path.display()))?;
-   debug!("saved session to {}", file_path.display());
+   fs::write(opts.file_path, json_data).wrap_err_with(|| {
+      format!(
+         "Failed to write to session file: {}",
+         opts.file_path.display()
+      )
+   })?;
+   debug!("saved session to {}", opts.file_path.display());
    Ok(())
 }
 
@@ -374,7 +392,11 @@ fn spawn_and_move_window<'niri>(
 
 fn restore_session(config: &Config, session_path: &Path) -> eyre::Result<()> {
    if !session_path.exists() {
-      save_session(session_path, config)?;
+      save_session(&SaveOptions {
+         file_path:  session_path,
+         config,
+         skip_empty: false,
+      })?;
       return Ok(());
    }
 
@@ -483,7 +505,11 @@ fn main() -> eyre::Result<()> {
       thread::sleep(Duration::from_millis(100));
 
       if last_save.elapsed() >= Duration::from_secs(args.save_interval) {
-         if let Err(report) = save_session(&session_path, &config) {
+         if let Err(report) = save_session(&SaveOptions {
+            file_path:  &session_path,
+            config:     &config,
+            skip_empty: false,
+         }) {
             error!("failed to save session: {report}");
          }
          last_save = Instant::now();
@@ -491,7 +517,11 @@ fn main() -> eyre::Result<()> {
    }
 
    info!("shutting down...");
-   if let Err(report) = save_session(&session_path, &config) {
+   if let Err(report) = save_session(&SaveOptions {
+      file_path:  &session_path,
+      config:     &config,
+      skip_empty: true,
+   }) {
       error!("error saving final session: {report}");
    }
    info!("shutdown complete");
