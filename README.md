@@ -47,6 +47,7 @@ Import the NixOS module and configure:
   };
 }
 ```
+
 The config file will live in the nix store and its path is specified using the `--config` flag in the systemd service. 
 
 ### Manual
