@@ -48,18 +48,7 @@ Import the NixOS module and configure:
 }
 ```
 
-Import the Home Manager module to generate the config file:
-
-```nix
-# home.nix
-{ inputs, ... }:
-{
-  imports = [ inputs.nirinit.homeModules.nirinit ];
-}
-```
-
-Note: Settings are defined in the NixOS module. The Home Manager module reads
-from `osConfig` and generates `$XDG_CONFIG_HOME/nirinit/config.toml`.
+The config file will live in the nix store and its path is specified using the `--config` flag in the systemd service. 
 
 ### Manual
 
