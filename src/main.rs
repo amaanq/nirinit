@@ -1,5 +1,8 @@
 use std::{
-   collections::HashMap,
+   collections::{
+      HashMap,
+      HashSet,
+   },
    fs,
    io,
    path::{
@@ -289,6 +292,12 @@ fn spawn_and_move_window<'niri>(
 
    let mut socket = Socket::connect().wrap_err("Failed to connect to Niri IPC socket")?;
 
+   // Earlier restores and windows already open must never be repositioned.
+   let existing_ids = niri_windows()?
+      .iter()
+      .map(|window| window.id)
+      .collect::<HashSet<u64>>();
+
    let reply = socket
       .send(Request::Action(Action::Spawn { command }))
       .map_err(NiriError::Send)?;
@@ -312,7 +321,9 @@ fn spawn_and_move_window<'niri>(
 
       let windows = niri_windows()?;
 
-      let Some(new_window) = windows.iter().find(|w| w.app_id.as_deref() == Some(app_id)) else {
+      let Some(new_window) = windows.iter().find(|window| {
+         window.app_id.as_deref() == Some(app_id) && !existing_ids.contains(&window.id)
+      }) else {
          continue;
       };
 
