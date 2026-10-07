@@ -75,6 +75,10 @@ apps = ["steam"]
 
 ## Session File
 
+Saves replace the session file atomically: a failed write leaves the previous
+session intact. Staged and saved files allow access only to the owner (mode 0600,
+subject to the process umask). This does not guarantee durability across power loss.
+
 The session file is located at `$XDG_DATA_HOME/nirinit/session.json`
 (typically `~/.local/share/nirinit/session.json`).
 

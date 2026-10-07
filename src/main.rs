@@ -1,15 +1,21 @@
 use std::{
    collections::HashMap,
    fs,
-   io,
+   io::{
+      self,
+      Write as _,
+   },
+   os::unix::fs::OpenOptionsExt as _,
    path::{
       Path,
       PathBuf,
    },
+   process,
    sync::{
       Arc,
       atomic::{
          AtomicBool,
+         AtomicU64,
          Ordering,
       },
    },
@@ -63,6 +69,8 @@ use signal_hook::{
 use thiserror::Error;
 
 mod logger;
+
+#[cfg(test)] mod tests;
 
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
@@ -257,7 +265,8 @@ fn save_session(opts: &SaveOptions) -> eyre::Result<()> {
 
          // Map app_id to launch command if it exists in the config
          let launch_command = window.app_id.as_ref().and_then(|app_id| {
-            opts.config
+            opts
+               .config
                .launch
                .get(app_id)
                .cloned()
@@ -285,7 +294,7 @@ fn save_session(opts: &SaveOptions) -> eyre::Result<()> {
    let json_data = serde_json::to_string_pretty(&session_windows)
       .wrap_err("Failed to serialize session data")?;
 
-   fs::write(opts.file_path, json_data).wrap_err_with(|| {
+   write_session_file(opts.file_path, json_data.as_bytes()).wrap_err_with(|| {
       format!(
          "Failed to write to session file: {}",
          opts.file_path.display()
@@ -293,6 +302,52 @@ fn save_session(opts: &SaveOptions) -> eyre::Result<()> {
    })?;
    debug!("saved session to {}", opts.file_path.display());
    Ok(())
+}
+
+/// Publish complete bytes without truncating the previous session on failure.
+fn write_session_file(path: &Path, data: &[u8]) -> io::Result<()> {
+   stage_session_file(path, |file| file.write_all(data))
+}
+
+fn stage_session_file(
+   path: &Path,
+   write: impl FnOnce(&mut fs::File) -> io::Result<()>,
+) -> io::Result<()> {
+   static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
+   // Stage in the destination directory so rename stays on one filesystem and
+   // is atomic.
+   let parent = path
+      .parent()
+      .filter(|parent| !parent.as_os_str().is_empty())
+      .unwrap_or_else(|| Path::new("."));
+   let (temporary, mut file) = loop {
+      let sequence = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
+      let temporary = parent.join(format!(".nirinit-{}-{sequence}.tmp", process::id()));
+      // Replacement inherits staging permissions; keep session data private
+      // regardless of umask.
+      match fs::OpenOptions::new()
+         .write(true)
+         .create_new(true)
+         .mode(0o600)
+         .open(&temporary)
+      {
+         Ok(file) => break (temporary, file),
+         Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {},
+         Err(err) => return Err(err),
+      }
+   };
+   let result = write(&mut file);
+   drop(file);
+   let result = result.and_then(|()| fs::rename(&temporary, path));
+   if result.is_err()
+      && let Err(err) = fs::remove_file(&temporary)
+   {
+      warn!(
+         "failed to remove temporary session {}: {err}",
+         temporary.display()
+      );
+   }
+   result
 }
 
 fn spawn_and_move_window<'niri>(
@@ -393,7 +448,7 @@ fn spawn_and_move_window<'niri>(
 fn restore_session(config: &Config, session_path: &Path) -> eyre::Result<()> {
    if !session_path.exists() {
       save_session(&SaveOptions {
-         file_path:  session_path,
+         file_path: session_path,
          config,
          skip_empty: false,
       })?;
