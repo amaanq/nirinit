@@ -59,6 +59,11 @@ cargo install --path .
 nirinit --save-interval 300
 ```
 
+Release archives named `nirinit-<arch>-linux.tar.gz` are Nix builds. Their
+dynamic linker is in `/nix/store`, so they do not start on Fedora, Debian, or
+other ordinary glibc systems. Use `nirinit-<arch>-unknown-linux-gnu.tar.gz`
+there, or build from source with the command above.
+
 ## Configuration
 
 The config file is located at `$XDG_CONFIG_HOME/nirinit/config.toml`

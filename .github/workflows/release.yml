@@ -50,9 +50,44 @@ jobs:
           name: ${{ matrix.artifact-name }}
           path: dist/${{ matrix.artifact-name }}
 
+  build-gnu:
+    name: Build portable glibc binary
+    strategy:
+      matrix:
+        include:
+          - runs-on: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            artifact-name: nirinit-x86_64-unknown-linux-gnu
+          - runs-on: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            artifact-name: nirinit-aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --locked --release --target ${{ matrix.target }}
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/nirinit dist/${{ matrix.artifact-name }}
+          chmod +x dist/${{ matrix.artifact-name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: dist/${{ matrix.artifact-name }}
+
   release:
     name: Create Release
-    needs: build
+    needs: [build, build-gnu]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
