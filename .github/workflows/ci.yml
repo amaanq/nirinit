@@ -33,7 +33,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, ubuntu-26.04-arm]
     permissions:
-      actions: write
       contents: read
     uses: manic-systems/workflows/.github/workflows/nix-checks.yml@06a950a6ef1291d634844fef482d44c6b3852f64 # v2.2.0
     with:
@@ -41,8 +40,6 @@ jobs:
       flake-check: false
       build: true
       build-command: nix build -L --no-link .#nirinit .#static
-      cache: true
-      cache-save: true
 
   actions:
     name: Actions Lint
