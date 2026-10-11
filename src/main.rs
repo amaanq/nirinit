@@ -3,6 +3,7 @@ use std::{
       HashMap,
       HashSet,
    },
+   env,
    fs,
    io,
    path::{
@@ -83,25 +84,25 @@ pub enum NiriError {
 
 type NiriResult<T> = Result<T, NiriError>;
 
-/// Window data for session persistence (excludes title field)
+/// Window data for session persistence (excludes title field).
 #[derive(Serialize, Deserialize)]
 struct SessionWindow<'niri> {
    id:               u64,
-   /// The application id of the window, see <https://wayland-book.com/xdg-shell-basics/xdg-toplevel.html>
+   /// The application id of the window, see <https://wayland-book.com/xdg-shell-basics/xdg-toplevel.html>.
    app_id:           Option<String>,
    /// The launch command to spawn this window (mapped from `app_id` via config,
-   /// otherwise `app_id` if no mapping exists)
+   /// otherwise `app_id` if no mapping exists).
    launch_command:   Option<String>,
-   /// Index of the workspace on the corresponding monitor
+   /// Index of the workspace on the corresponding monitor.
    workspace_idx:    Option<u8>,
-   /// Name of the workspace, in case of a named workspace
+   /// Name of the workspace, in case of a named workspace.
    workspace_name:   Option<&'niri str>,
-   /// Output the workspace is on
+   /// Output the workspace is on.
    workspace_output: Option<&'niri str>,
-   /// Whether the window is focused or not
+   /// Whether the window is focused or not.
    is_focused:       bool,
    /// Window size (width, height) in logical pixels
-   /// TODO: Remove [`Option`] in a month
+   /// TODO: Remove [`Option`] in a month.
    #[serde(default)]
    window_size:      Option<(i32, i32)>,
 }
@@ -112,7 +113,7 @@ struct Config {
    #[serde(default)]
    skip:    Skip,
    /// Map `app_id` to actual launch command (e.g.,
-   /// "thorium-discord.com__app-Default" -> "discord-web-app")
+   /// "thorium-discord.com__app-Default" -> "discord-web-app").
    #[serde(default)]
    launch:  HashMap<String, String>,
    /// Prepended to every launch command (e.g., "uwsm app --").
@@ -145,15 +146,15 @@ struct Skip {
     )
 )]
 struct Args {
-   /// Save interval in seconds
+   /// Save interval in seconds.
    #[arg(long, default_value = "300")]
    save_interval: u64,
 
-   /// Path to config file
+   /// Path to config file.
    #[arg(long, short)]
    config: Option<PathBuf>,
 
-   /// Enable debug output
+   /// Enable debug output.
    #[arg(long, short)]
    debug: bool,
 }
@@ -216,7 +217,7 @@ fn config_file(config_override: Option<&Path>) -> eyre::Result<PathBuf> {
       return Ok(path.to_path_buf());
    }
 
-   if let Ok(config_path) = std::env::var("NIRINIT_CONFIG") {
+   if let Ok(config_path) = env::var("NIRINIT_CONFIG") {
       return Ok(PathBuf::from(config_path));
    }
 
