@@ -65,11 +65,14 @@ The config file is located at `$XDG_CONFIG_HOME/nirinit/config.toml`
 (typically `~/.config/nirinit/config.toml`).
 
 ```toml
+# Prepended to every launch command
+wrapper = "uwsm app --"
+
 [skip]
 apps = ["steam"]
 
 [launch]
-# Map app_id to the actual command to spawn
+# Map app_id to the actual command to spawn, run through the shell
 "chromium-example.com__-Default" = "example-web-app"
 ```
 
