@@ -10,13 +10,13 @@ categories  = [ "command-line-utilities", "config" ]
 keywords    = [ "niri", "wayland", "session", "window-manager" ]
 
 [dependencies]
-log        = { features = [ "std" ], version = "0.4.29" }
+log        = { features = [ "std" ], version = "0.4.34" }
 misstep    = "0.3.0"
-niri-ipc   = "25.11.0"
+niri-ipc   = "26.4.0"
 pound      = "0.2.0"
-serde      = { features = [ "derive" ], version = "1.0.228" }
-serde_json = "1.0.149"
-toml       = { default-features = false, features = [ "parse", "serde", "std" ], version = "1.0.1" }
+serde      = { features = [ "derive" ], version = "1.0.229" }
+serde_json = "1.0.152"
+toml       = { default-features = false, features = [ "parse", "serde", "std" ], version = "1.1.8" }
 
 [lints.clippy]
 cargo    = { level = "warn", priority = -1 }
