@@ -135,14 +135,14 @@ fn niri_request(request: Request) -> Result<Response> {
 fn niri_windows() -> Result<Vec<Window>> {
    match niri_request(Request::Windows)? {
       Response::Windows(windows) => Ok(windows),
-      other => bail!("Unexpected response from Niri: {other:?}"),
+      _ => bail!("Unexpected response from Niri"),
    }
 }
 
 fn niri_workspaces() -> Result<Vec<Workspace>> {
    match niri_request(Request::Workspaces)? {
       Response::Workspaces(workspaces) => Ok(workspaces),
-      other => bail!("Unexpected response from Niri: {other:?}"),
+      _ => bail!("Unexpected response from Niri"),
    }
 }
 
