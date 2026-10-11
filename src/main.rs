@@ -110,11 +110,13 @@ struct SessionWindow<'niri> {
 #[serde(deny_unknown_fields)]
 struct Config {
    #[serde(default)]
-   skip:   Skip,
+   skip:    Skip,
    /// Map `app_id` to actual launch command (e.g.,
    /// "thorium-discord.com__app-Default" -> "discord-web-app")
    #[serde(default)]
-   launch: HashMap<String, String>,
+   launch:  HashMap<String, String>,
+   /// Prepended to every launch command (e.g., "uwsm app --").
+   wrapper: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -288,8 +290,6 @@ fn spawn_and_move_window<'niri>(
    workspace_output: Option<&'niri str>,
    window_size: Option<(i32, i32)>,
 ) -> eyre::Result<()> {
-   let command = vec![launch_command.to_owned()];
-
    let mut socket = Socket::connect().wrap_err("Failed to connect to Niri IPC socket")?;
 
    // Earlier restores and windows already open must never be repositioned.
@@ -299,7 +299,9 @@ fn spawn_and_move_window<'niri>(
       .collect::<HashSet<u64>>();
 
    let reply = socket
-      .send(Request::Action(Action::Spawn { command }))
+      .send(Request::Action(Action::SpawnSh {
+         command: launch_command.to_owned(),
+      }))
       .map_err(NiriError::Send)?;
 
    let Reply::Ok(Response::Handled) = reply else {
@@ -414,8 +416,12 @@ fn restore_session(config: &Config, session_path: &Path) -> eyre::Result<()> {
          }
 
          if let Some(ref app_id) = window.app_id {
+            let command = config.wrapper.as_ref().map_or_else(
+               || launch_command.clone(),
+               |wrapper| format!("{wrapper} {launch_command}"),
+            );
             spawn_and_move_window(
-               launch_command,
+               &command,
                app_id,
                window.workspace_idx,
                window.workspace_name,
