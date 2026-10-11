@@ -106,6 +106,7 @@
               version = "0.2.2";
 
               cargoLock.lockFile = ./Cargo.lock;
+              stripAllList = [ "bin" ];
 
               meta.mainProgram = packageName;
             };
