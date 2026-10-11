@@ -5,7 +5,10 @@ use std::{
    },
    env,
    fs,
-   io,
+   io::{
+      self,
+      Write as _,
+   },
    path::{
       Path,
       PathBuf,
@@ -277,8 +280,37 @@ fn save_session(file_path: &Path, config: &Config) -> eyre::Result<()> {
    let json_data = serde_json::to_string_pretty(&session_windows)
       .wrap_err("Failed to serialize session data")?;
 
-   fs::write(file_path, json_data)
-      .wrap_err_with(|| format!("Failed to write to session file: {}", file_path.display()))?;
+   let write = || -> io::Result<()> {
+      let target = if fs::symlink_metadata(file_path).is_ok_and(|meta| meta.is_symlink()) {
+         file_path.with_file_name(fs::read_link(file_path)?)
+      } else {
+         file_path.to_owned()
+      };
+      let permissions = match fs::metadata(&target) {
+         Ok(metadata) => Some(metadata.permissions()),
+         Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+         Err(err) => return Err(err),
+      };
+
+      let tmp_path = target.with_extension("json.tmp");
+      let mut file = fs::File::create(&tmp_path)?;
+      if let Some(permissions) = permissions {
+         file.set_permissions(permissions)?;
+      }
+      file.write_all(json_data.as_bytes())?;
+      file.sync_all()?;
+
+      match fs::rename(&tmp_path, &target) {
+         // A bind-mounted file (e.g. impermanence) can't be renamed over, only
+         // rewritten in place.
+         Err(err) if err.kind() == io::ErrorKind::ResourceBusy => {
+            fs::remove_file(&tmp_path)?;
+            fs::write(&target, &json_data)
+         },
+         result => result,
+      }
+   };
+   write().wrap_err_with(|| format!("Failed to write to session file: {}", file_path.display()))?;
    debug!("saved session to {}", file_path.display());
    Ok(())
 }
