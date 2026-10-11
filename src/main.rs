@@ -66,6 +66,9 @@ use signal_hook::{
 };
 use thiserror::Error;
 
+use crate::desktop::DesktopEntries;
+
+mod desktop;
 mod logger;
 
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
@@ -408,6 +411,8 @@ fn restore_session(config: &Config, session_path: &Path) -> eyre::Result<()> {
    let mut sorted_windows = windows;
    sorted_windows.sort_by_key(|w| (w.workspace_output, w.workspace_idx));
 
+   let desktop_entries = DesktopEntries::load();
+
    for window in sorted_windows {
       // Check if the launch command should be skipped
       if let Some(ref launch_command) = window.launch_command {
@@ -417,10 +422,20 @@ fn restore_session(config: &Config, session_path: &Path) -> eyre::Result<()> {
          }
 
          if let Some(ref app_id) = window.app_id {
-            let command = config.wrapper.as_ref().map_or_else(
-               || launch_command.clone(),
-               |wrapper| format!("{wrapper} {launch_command}"),
-            );
+            let discovered = if config.launch.contains_key(app_id) {
+               None
+            } else {
+               desktop_entries.launch_command(app_id)
+            };
+            if let Some(discovered) = discovered {
+               debug!("using desktop entry for {app_id}: {discovered}");
+            }
+
+            let base = discovered.unwrap_or(launch_command);
+            let command = config
+               .wrapper
+               .as_ref()
+               .map_or_else(|| base.to_owned(), |wrapper| format!("{wrapper} {base}"));
             spawn_and_move_window(
                &command,
                app_id,
