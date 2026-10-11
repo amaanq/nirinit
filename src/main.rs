@@ -382,8 +382,19 @@ fn restore_session(config: &Config, session_path: &Path) -> Result<()> {
       return Ok(());
    }
 
-   let windows = serde_json::from_str::<Vec<SessionWindow>>(&session_data)
-      .context("Failed to load session data")?;
+   let windows = match serde_json::from_str::<Vec<SessionWindow>>(&session_data) {
+      Ok(windows) => windows,
+      Err(err) => {
+         let corrupt_path = session_path.with_extension("json.corrupt");
+         warn!(
+            "session file is corrupt, moving it to {} ({err})",
+            corrupt_path.display()
+         );
+         fs::rename(session_path, &corrupt_path)
+            .context("Failed to move the corrupt session file aside")?;
+         return Ok(());
+      },
+   };
 
    // Sort windows by workspace index to ensure lower-indexed workspaces get
    // created first
