@@ -103,7 +103,7 @@
             rustPlatform.buildRustPackage {
               pname = packageName;
               src = ./.;
-              version = "0.2.2";
+              version = "0.3.0";
 
               cargoLock.lockFile = ./Cargo.lock;
               stripAllList = [ "bin" ];
