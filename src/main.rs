@@ -404,9 +404,13 @@ fn restore_session(config: &Config, session_path: &Path) -> Result<()> {
    let desktop_entries = DesktopEntries::load();
 
    for window in sorted_windows {
-      // Check if the launch command should be skipped
+      // Check if the app should be skipped
       if let Some(ref launch_command) = window.launch_command {
-         if config.skip.apps.contains(launch_command) {
+         if window
+            .app_id
+            .as_ref()
+            .is_some_and(|app_id| config.skip.apps.contains(app_id))
+         {
             info!("skipping command: {launch_command}");
             continue;
          }
