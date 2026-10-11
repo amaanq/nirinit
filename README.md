@@ -51,6 +51,11 @@ Import the NixOS module and configure:
 
 The config file will live in the nix store and its path is specified using the `--config` flag in the systemd service.
 
+### Prebuilt Binaries
+
+Each [release](https://github.com/amaanq/nirinit/releases) has statically linked
+`nirinit-linux-amd64` and `nirinit-linux-arm64` binaries that run on any distro.
+
 ### Manual
 
 ```bash

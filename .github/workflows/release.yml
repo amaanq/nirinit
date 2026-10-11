@@ -42,6 +42,7 @@ jobs:
     uses: manic-systems/workflows/.github/workflows/rust-build.yml@06a950a6ef1291d634844fef482d44c6b3852f64 # v2.2.0
     with:
       upload: true
+      build-command: nix build -L .#static
       version: ${{ needs.prepare.outputs.version }}
       os: ${{ matrix.os }}
       suffix: ${{ matrix.suffix }}
