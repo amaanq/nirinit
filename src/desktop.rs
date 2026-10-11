@@ -16,6 +16,8 @@ use std::{
    },
 };
 
+use crate::xdg_dir;
+
 struct DesktopEntry {
    id:       String,
    exec:     String,
@@ -95,7 +97,7 @@ fn application_dirs() -> Vec<PathBuf> {
       .filter(|dirs| !dirs.is_empty())
       .unwrap_or_else(|| OsString::from("/usr/local/share:/usr/share"));
 
-   dirs::data_dir()
+   xdg_dir("XDG_DATA_HOME", ".local/share")
       .into_iter()
       .chain(env::split_paths(&data_dirs))
       .filter(|dir| dir.is_absolute())

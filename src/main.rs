@@ -13,40 +13,22 @@ use std::{
       Path,
       PathBuf,
    },
-   sync::{
-      Arc,
-      atomic::{
-         AtomicBool,
-         Ordering,
-      },
-   },
    thread,
-   time::{
-      Duration,
-      Instant,
-   },
+   time::Duration,
 };
 
-use anstyle::{
-   AnsiColor,
-   Color,
-   Style,
-};
-use clap::{
-   Parser,
-   builder,
-   crate_authors,
-};
-use color_eyre::eyre;
-use eyre::{
-   Context as _,
-   OptionExt as _,
-};
 use log::{
    debug,
    error,
    info,
    warn,
+};
+use misstep::{
+   OptionExt as _,
+   Result,
+   ResultExt as _,
+   bail,
+   report,
 };
 use niri_ipc::{
    Action,
@@ -59,15 +41,11 @@ use niri_ipc::{
    WorkspaceReferenceArg,
    socket::Socket,
 };
+use pound::Parse;
 use serde::{
    Deserialize,
    Serialize,
 };
-use signal_hook::{
-   consts::TERM_SIGNALS,
-   flag,
-};
-use thiserror::Error;
 
 use crate::desktop::DesktopEntries;
 
@@ -77,18 +55,6 @@ mod logger;
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 const WINDOW_POLL_INTERVAL: Duration = Duration::from_millis(250);
-
-#[derive(Debug, Error)]
-pub enum NiriError {
-   #[error("Failed to communicate with Niri via IPC: {0}")]
-   Reply(String),
-   #[error("Failed to connect to Niri's IPC socket: {0}")]
-   Connect(io::Error),
-   #[error("Failed to send data to Niri's IPC socket: {0}")]
-   Send(io::Error),
-}
-
-type NiriResult<T> = Result<T, NiriError>;
 
 /// Window data for session persistence (excludes title field).
 #[derive(Serialize, Deserialize)]
@@ -133,92 +99,73 @@ struct Skip {
    apps: Vec<String>,
 }
 
-#[derive(Parser)]
-#[command(
-    author=crate_authors!("\n"),
-    styles=get_styles(),
-    version,
-    about,
-    long_about = None,
-    help_template = concat!(
-        "\n",
-        "{before-help}{name} {version}\n",
-        "{author-with-newline}\n",
-        "{about-with-newline}\n",
-        "{usage-heading} {usage}\n",
-        "\n",
-        "{all-args}{after-help}\n",
-        "\n"
-    )
-)]
+/// A session manager for Niri, a scrollable-tiling Wayland compositor.
+#[derive(Parse)]
 struct Args {
    /// Save interval in seconds.
-   #[arg(long, default_value = "300")]
+   #[pound(long, default = "300")]
    save_interval: u64,
 
    /// Path to config file.
-   #[arg(long, short)]
+   #[pound(short, long)]
    config: Option<PathBuf>,
 
    /// Enable debug output.
-   #[arg(long, short)]
+   #[pound(short, long)]
    debug: bool,
 }
 
-fn load_config(config_override: Option<&Path>) -> eyre::Result<Config> {
+fn load_config(config_override: Option<&Path>) -> Result<Config> {
    let config_path = config_file(config_override)?;
 
    let config = fs::read_to_string(&config_path)
-      .wrap_err_with(|| format!("The config file doesn't exist at {}", config_path.display()))?;
+      .with_context(|| format!("The config file doesn't exist at {}", config_path.display()))?;
 
    Ok(toml::from_str(&config)?)
 }
 
-fn niri_windows() -> NiriResult<Vec<Window>> {
-   let mut socket = Socket::connect().map_err(NiriError::Connect)?;
-   match socket
-      .send(Request::Windows)
-      .map_err(NiriError::Send)?
-      .map_err(NiriError::Reply)?
-   {
+fn niri_request(request: Request) -> Result<Response> {
+   let mut socket = Socket::connect().context("Failed to connect to Niri's IPC socket")?;
+   let reply = socket
+      .send(request)
+      .context("Failed to send data to Niri's IPC socket")?;
+   reply.map_err(|err| report!("Niri rejected the request: {err}"))
+}
+
+fn niri_windows() -> Result<Vec<Window>> {
+   match niri_request(Request::Windows)? {
       Response::Windows(windows) => Ok(windows),
-      other => {
-         Err(NiriError::Reply(format!(
-            "Unexpected response from Niri: {other:?}"
-         )))
-      },
+      other => bail!("Unexpected response from Niri: {other:?}"),
    }
 }
 
-fn niri_workspaces() -> NiriResult<Vec<Workspace>> {
-   let mut socket = Socket::connect().map_err(NiriError::Connect)?;
-   match socket
-      .send(Request::Workspaces)
-      .map_err(NiriError::Send)?
-      .map_err(NiriError::Reply)?
-   {
+fn niri_workspaces() -> Result<Vec<Workspace>> {
+   match niri_request(Request::Workspaces)? {
       Response::Workspaces(workspaces) => Ok(workspaces),
-      other => {
-         Err(NiriError::Reply(format!(
-            "Unexpected response from Niri: {other:?}"
-         )))
-      },
+      other => bail!("Unexpected response from Niri: {other:?}"),
    }
 }
 
-fn data_file() -> eyre::Result<PathBuf> {
-   let data_dir = dirs::data_dir()
-      .ok_or_eyre("Failed to locate the data directory ($XDG_DATA_HOME)")?
+fn xdg_dir(var: &str, fallback: &str) -> Option<PathBuf> {
+   env::var_os(var)
+      .map(PathBuf::from)
+      .filter(|dir| dir.is_absolute())
+      .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(fallback)))
+}
+
+fn data_file() -> Result<PathBuf> {
+   let data_dir = xdg_dir("XDG_DATA_HOME", ".local/share")
+      .context("Failed to locate the data directory ($XDG_DATA_HOME)")?
       .join(APP_NAME);
    fs::create_dir_all(&data_dir)
-      .wrap_err_with(|| format!("Failed to create data directory: {}", data_dir.display()))?;
+      .with_context(|| format!("Failed to create data directory: {}", data_dir.display()))?;
    Ok(data_dir.join("session.json"))
 }
 
 /// Resolves the config file path by checking the `--config` flag, then the
 /// `NIRINIT_CONFIG` environment variable, and finally falling back to
 /// `$XDG_CONFIG_HOME/nirinit/config.toml`.
-fn config_file(config_override: Option<&Path>) -> eyre::Result<PathBuf> {
+fn config_file(config_override: Option<&Path>) -> Result<PathBuf> {
    if let Some(path) = config_override {
       return Ok(path.to_path_buf());
    }
@@ -227,10 +174,10 @@ fn config_file(config_override: Option<&Path>) -> eyre::Result<PathBuf> {
       return Ok(PathBuf::from(config_path));
    }
 
-   let config_dir = dirs::config_dir()
-      .ok_or_eyre("Failed to locate the config directory ($XDG_CONFIG_HOME)")?
+   let config_dir = xdg_dir("XDG_CONFIG_HOME", ".config")
+      .context("Failed to locate the config directory ($XDG_CONFIG_HOME)")?
       .join(APP_NAME);
-   fs::create_dir_all(&config_dir).wrap_err_with(|| {
+   fs::create_dir_all(&config_dir).with_context(|| {
       format!(
          "Failed to create config directory: {}",
          config_dir.display()
@@ -249,7 +196,7 @@ fn find_workspace_for_window<'niri>(
 }
 
 /// Save the session.
-fn save_session(file_path: &Path, config: &Config) -> eyre::Result<()> {
+fn save_session(file_path: &Path, config: &Config) -> Result<()> {
    let windows = niri_windows()?;
    let workspaces = niri_workspaces()?;
 
@@ -280,8 +227,8 @@ fn save_session(file_path: &Path, config: &Config) -> eyre::Result<()> {
       })
       .collect::<Vec<_>>();
 
-   let json_data = serde_json::to_string_pretty(&session_windows)
-      .wrap_err("Failed to serialize session data")?;
+   let json_data =
+      serde_json::to_string_pretty(&session_windows).context("Failed to serialize session data")?;
 
    let write = || -> io::Result<()> {
       let target = if fs::symlink_metadata(file_path).is_ok_and(|meta| meta.is_symlink()) {
@@ -313,7 +260,7 @@ fn save_session(file_path: &Path, config: &Config) -> eyre::Result<()> {
          result => result,
       }
    };
-   write().wrap_err_with(|| format!("Failed to write to session file: {}", file_path.display()))?;
+   write().with_context(|| format!("Failed to write to session file: {}", file_path.display()))?;
    debug!("saved session to {}", file_path.display());
    Ok(())
 }
@@ -325,8 +272,8 @@ fn spawn_and_move_window<'niri>(
    workspace_name: Option<&'niri str>,
    workspace_output: Option<&'niri str>,
    window_size: Option<(i32, i32)>,
-) -> eyre::Result<()> {
-   let mut socket = Socket::connect().wrap_err("Failed to connect to Niri IPC socket")?;
+) -> Result<()> {
+   let mut socket = Socket::connect().context("Failed to connect to Niri's IPC socket")?;
 
    // Earlier restores and windows already open must never be repositioned.
    let existing_ids = niri_windows()?
@@ -338,7 +285,7 @@ fn spawn_and_move_window<'niri>(
       .send(Request::Action(Action::SpawnSh {
          command: launch_command.to_owned(),
       }))
-      .map_err(NiriError::Send)?;
+      .context("Failed to send data to Niri's IPC socket")?;
 
    let Reply::Ok(Response::Handled) = reply else {
       error!("failed to spawn command `{launch_command}`");
@@ -388,8 +335,8 @@ fn spawn_and_move_window<'niri>(
             reference: workspace_reference,
             focus:     false,
          }))
-         .map_err(NiriError::Send)?
-         .map_err(NiriError::Reply)?;
+         .context("Failed to send data to Niri's IPC socket")?
+         .map_err(|err| report!("Niri rejected moving the window: {err}"))?;
 
       if let Some((width, height)) = window_size {
          if let Err(err) = socket.send(Request::Action(Action::SetWindowWidth {
@@ -421,7 +368,7 @@ fn spawn_and_move_window<'niri>(
    Ok(())
 }
 
-fn restore_session(config: &Config, session_path: &Path) -> eyre::Result<()> {
+fn restore_session(config: &Config, session_path: &Path) -> Result<()> {
    if !session_path.exists() {
       save_session(session_path, config)?;
       return Ok(());
@@ -429,14 +376,14 @@ fn restore_session(config: &Config, session_path: &Path) -> eyre::Result<()> {
 
    info!("restoring previous session");
 
-   let session_data = fs::read_to_string(session_path).wrap_err("Failed to read session file")?;
+   let session_data = fs::read_to_string(session_path).context("Failed to read session file")?;
    if session_data.is_empty() {
       info!("session file at {} is empty", session_path.display());
       return Ok(());
    }
 
    let windows = serde_json::from_str::<Vec<SessionWindow>>(&session_data)
-      .wrap_err("Failed to load session data")?;
+      .context("Failed to load session data")?;
 
    // Sort windows by workspace index to ensure lower-indexed workspaces get
    // created first
@@ -484,41 +431,12 @@ fn restore_session(config: &Config, session_path: &Path) -> eyre::Result<()> {
    Ok(())
 }
 
-#[must_use]
-const fn get_styles() -> builder::Styles {
-   builder::Styles::styled()
-      .usage(
-         Style::new()
-            .bold()
-            .fg_color(Some(Color::Ansi(AnsiColor::Yellow))),
-      )
-      .header(
-         Style::new()
-            .bold()
-            .fg_color(Some(Color::Ansi(AnsiColor::Yellow))),
-      )
-      .literal(Style::new().fg_color(Some(Color::Ansi(AnsiColor::Green))))
-      .invalid(
-         Style::new()
-            .bold()
-            .fg_color(Some(Color::Ansi(AnsiColor::Red))),
-      )
-      .error(
-         Style::new()
-            .bold()
-            .fg_color(Some(Color::Ansi(AnsiColor::Red))),
-      )
-      .valid(
-         Style::new()
-            .bold()
-            .fg_color(Some(Color::Ansi(AnsiColor::Green))),
-      )
-      .placeholder(Style::new().fg_color(Some(Color::Ansi(AnsiColor::White))))
-}
-
-fn main() -> eyre::Result<()> {
+#[expect(
+   clippy::infinite_loop,
+   reason = "saves until the service manager kills the process"
+)]
+fn main() -> Result<()> {
    logger::init();
-   color_eyre::install()?;
 
    let args = Args::parse();
 
@@ -532,29 +450,15 @@ fn main() -> eyre::Result<()> {
    });
 
    let session_path = data_file()?;
-   let term = Arc::new(AtomicBool::new(false));
-
-   for sig in TERM_SIGNALS {
-      flag::register(*sig, Arc::clone(&term))?;
-   }
-
    info!("starting nirinit-manager");
    restore_session(&config, &session_path)?;
 
    info!("starting periodic save (interval: {}s)", args.save_interval);
-   let mut last_save = Instant::now();
+   loop {
+      thread::sleep(Duration::from_secs(args.save_interval));
 
-   while !term.load(Ordering::Relaxed) {
-      thread::sleep(Duration::from_millis(100));
-
-      if last_save.elapsed() >= Duration::from_secs(args.save_interval) {
-         if let Err(report) = save_session(&session_path, &config) {
-            error!("failed to save session: {report}");
-         }
-         last_save = Instant::now();
+      if let Err(report) = save_session(&session_path, &config) {
+         error!("failed to save session: {report}");
       }
    }
-
-   info!("shutting down");
-   Ok(())
 }
