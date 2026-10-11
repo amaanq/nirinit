@@ -8,6 +8,7 @@ and restores your window layout.
 - Auto-saves session every 5 minutes (configurable)
 - Restores windows to their workspaces on startup
 - Preserves workspace names, indices, outputs, and window sizes
+- Finds launch commands from installed `.desktop` entries (flatpaks, PWAs, etc.)
 - Map `app_id` to custom launch commands
 - Skip specific apps from being restored
 
@@ -48,7 +49,7 @@ Import the NixOS module and configure:
 }
 ```
 
-The config file will live in the nix store and its path is specified using the `--config` flag in the systemd service. 
+The config file will live in the nix store and its path is specified using the `--config` flag in the systemd service.
 
 ### Manual
 
@@ -72,7 +73,8 @@ wrapper = "uwsm app --"
 apps = ["steam"]
 
 [launch]
-# Map app_id to the actual command to spawn, run through the shell
+# Map app_id to the actual command to spawn, run through the shell. This is only
+# needed when no installed .desktop entry has a matching file name or StartupWMClass.
 "chromium-example.com__-Default" = "example-web-app"
 ```
 
