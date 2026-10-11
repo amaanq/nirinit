@@ -12,5 +12,5 @@ to actual launch commands, in case the `app_id` for a given window is problemati
 
 ```toml
 [launch]
-"thorium-browser" = "thorium"
+"chrome-discord.com__app-Default" = "discord-web-app"
 ```

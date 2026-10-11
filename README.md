@@ -40,7 +40,7 @@ Import the NixOS module and configure:
     settings = {
       # Map app_id to launch command (useful for PWAs, flatpaks, etc.)
       launch = {
-        "chromium-example.com__-Default" = "example-web-app";
+        "chrome-discord.com__app-Default" = "discord-web-app";
       };
       # Apps to skip during restore
       skip.apps = [ "steam" ];
@@ -75,7 +75,7 @@ apps = ["steam"]
 [launch]
 # Map app_id to the actual command to spawn, run through the shell. This is only
 # needed when no installed .desktop entry has a matching file name or StartupWMClass.
-"chromium-example.com__-Default" = "example-web-app"
+"chrome-discord.com__app-Default" = "discord-web-app"
 ```
 
 ## Session File

@@ -116,7 +116,7 @@ struct Config {
    #[serde(default)]
    skip:    Skip,
    /// Map `app_id` to actual launch command (e.g.,
-   /// "thorium-discord.com__app-Default" -> "discord-web-app").
+   /// "chrome-discord.com__app-Default" -> "discord-web-app").
    #[serde(default)]
    launch:  HashMap<String, String>,
    /// Prepended to every launch command (e.g., "uwsm app --").
