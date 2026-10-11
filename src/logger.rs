@@ -3,11 +3,6 @@ use std::io::{
    Write as _,
 };
 
-use anstyle::{
-   AnsiColor,
-   Color,
-   Style,
-};
 use log::{
    Level,
    LevelFilter,
@@ -16,9 +11,13 @@ use log::{
    Record,
 };
 
-pub fn paint(color: Option<impl Into<Color>>, text: &str) -> String {
-   let style = Style::new().fg_color(color.map(Into::into));
-   format!("{style}{text}{style:#}")
+const RED: u8 = 31;
+const GREEN: u8 = 32;
+const YELLOW: u8 = 33;
+const BLUE: u8 = 34;
+
+fn paint(color: u8, text: &str) -> String {
+   format!("\x1b[{color}m{text}\x1b[0m")
 }
 
 struct Logger;
@@ -31,32 +30,16 @@ impl Log for Logger {
    fn log(&self, record: &Record) {
       match record.level() {
          Level::Error => {
-            eprintln!(
-               "{} {}",
-               paint(Some(AnsiColor::Red), "Error:"),
-               record.args()
-            );
+            eprintln!("{} {}", paint(RED, "Error:"), record.args());
          },
          Level::Warn => {
-            eprintln!(
-               "{} {}",
-               paint(Some(AnsiColor::Yellow), "Warning:"),
-               record.args()
-            );
+            eprintln!("{} {}", paint(YELLOW, "Warning:"), record.args());
          },
          Level::Info => {
-            eprintln!(
-               "{} {}",
-               paint(Some(AnsiColor::Green), "Info:"),
-               record.args()
-            );
+            eprintln!("{} {}", paint(GREEN, "Info:"), record.args());
          },
          Level::Debug => {
-            eprintln!(
-               "{} {}",
-               paint(Some(AnsiColor::Blue), "Debug:"),
-               record.args()
-            );
+            eprintln!("{} {}", paint(BLUE, "Debug:"), record.args());
          },
          Level::Trace => {
             eprintln!(
