@@ -40,7 +40,7 @@ jobs:
       os: ${{ matrix.os }}
       flake-check: false
       build: true
-      build-command: nix build -L --no-link
+      build-command: nix build -L --no-link .#nirinit .#static
       cache: true
       cache-save: true
 

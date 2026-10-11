@@ -97,17 +97,22 @@
         pkgs:
         let
           packageName = "nirinit";
+
+          mkNirinit =
+            rustPlatform:
+            rustPlatform.buildRustPackage {
+              pname = packageName;
+              src = ./.;
+              version = "0.2.2";
+
+              cargoLock.lockFile = ./Cargo.lock;
+
+              meta.mainProgram = packageName;
+            };
         in
         {
-          nirinit = pkgs.rustPlatform.buildRustPackage {
-            pname = packageName;
-            src = ./.;
-            version = "0.2.2";
-
-            cargoLock.lockFile = ./Cargo.lock;
-
-            meta.mainProgram = packageName;
-          };
+          nirinit = mkNirinit pkgs.rustPlatform;
+          static = mkNirinit pkgs.pkgsStatic.rustPlatform;
 
           default = self.packages.${pkgs.stdenv.hostPlatform.system}.nirinit;
         }
