@@ -30,7 +30,7 @@
               mkEnableOption
               mkPackageOption
               mkIf
-              getExe
+              getExe'
               ;
             cfg = config.services.nirinit;
           in
@@ -83,7 +83,7 @@
                   serviceConfig = {
                     Type = "simple";
                     Restart = "always";
-                    ExecStart = "${getExe cfg.package} --config ${configFile}";
+                    ExecStart = "${getExe' cfg.package "nirinit"} --config ${configFile}";
                     PrivateTmp = true;
                   };
                 };
